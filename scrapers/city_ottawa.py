@@ -1,59 +1,45 @@
 """
-City of Ottawa careers (Avature-based, JS-rendered).
+City of Ottawa careers (SuccessFactors-based career site).
 Filters to the "Information Technology jobs" category.
 
-First pass matched on broad URL patterns and picked up navigation links
-(language switcher, "View Jobs" menu item, category list links) instead of
-actual postings. Real job postings on Avature career sites carry a unique
-numeric posting ID in the URL - nav links don't - so we require that as
-the matching signal instead.
+CORRECTED: the previous URL (.../viewalljobs/?category=...) only shows a
+category MENU page, not actual postings - that's why nav links like
+"Cybersecurity" and "OC Transpo" were being scraped instead of real jobs.
+The actual category listing page is at a different URL pattern
+(.../city-jobs/go/<Category-Name>/<id>/), confirmed via live inspection.
+
+Also confirmed this page is plain server-rendered HTML - no JS/Playwright
+needed, which makes this faster and more reliable than the browser-based
+approach used for Hydro Ottawa/CGI.
 """
 import re
-from .utils import clean_text, make_job
-from .browser_utils import get_rendered_html
-from bs4 import BeautifulSoup
+from .utils import get_soup, clean_text, make_job
 
 SOURCE_NAME = "City of Ottawa"
-URL = "https://jobs-emplois.ottawa.ca/city-jobs/viewalljobs/?category=Information+Technology+jobs"
+URL = "https://jobs-emplois.ottawa.ca/city-jobs/go/Information-Technology-jobs/8649547/"
 
-WAIT_SELECTOR = "a[href]"
-
-# Matches job detail URLs like .../city-jobs/JobDetail/something/12345
-# or any path segment that's purely numeric (the posting ID).
-JOB_ID_PATTERN = re.compile(r"/\d{4,}(/|$|\?)")
-
-# Known nav/menu link text to explicitly exclude even if a stray ID matches
-EXCLUDE_TITLES = {
-    "english (united kingdom)", "français (canada)", "view jobs",
-    "apply now", "view job", "learn more", "search/apply for jobs",
-    "frequently asked questions", "technical faqs", "working here",
-    "why us?", "core behaviours", "leadership competencies", "language",
-    "candidate profile", "employee profile", "home",
-}
+# Real job posting URLs look like: /city-jobs/job/<slug>/<numeric-id>/
+JOB_URL_PATTERN = re.compile(r"/city-jobs/job/")
 
 
 def scrape():
     jobs = []
     try:
-        html = get_rendered_html(URL, wait_selector=WAIT_SELECTOR, wait_ms=6000)
+        soup = get_soup(URL)
     except Exception as e:
-        print(f"[{SOURCE_NAME}] browser fetch failed: {e}")
+        print(f"[{SOURCE_NAME}] fetch failed: {e}")
         return jobs
 
-    soup = BeautifulSoup(html, "lxml")
     links = soup.find_all("a", href=True)
-
     seen_urls = set()
+
     for link in links:
         href = link["href"]
-
-        if not JOB_ID_PATTERN.search(href):
+        if not JOB_URL_PATTERN.search(href):
             continue
 
         title = clean_text(link.get_text())
-        if not title or len(title) < 8:
-            continue
-        if title.lower() in EXCLUDE_TITLES:
+        if not title or len(title) < 5:
             continue
 
         if href.startswith("/"):
@@ -66,6 +52,6 @@ def scrape():
         jobs.append(make_job(title=title, url=href, source=SOURCE_NAME))
 
     if not jobs:
-        print(f"[{SOURCE_NAME}] no job links found - page structure may differ from expected, needs live inspection")
+        print(f"[{SOURCE_NAME}] no job links found - could genuinely mean 0 postings right now, or markup changed")
 
     return jobs
