@@ -1,0 +1,41 @@
+name: Daily Job Scraper
+
+on:
+  schedule:
+    # 7:00 AM Eastern = 11:00 UTC (12:00 UTC during EDT - adjust if needed)
+    - cron: "0 11 * * *"
+  workflow_dispatch: {}  # lets you manually trigger a run from the Actions tab to test
+
+jobs:
+  scrape-and-email:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run scraper and send email
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        run: python main.py
+
+      - name: Commit updated seen_jobs.json
+        run: |
+          git config user.name "job-scraper-bot"
+          git config user.email "actions@github.com"
+          git add seen_jobs.json
+          git diff --staged --quiet || git commit -m "Update seen jobs [skip ci]"
+          git push
