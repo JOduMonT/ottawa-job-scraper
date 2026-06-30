@@ -15,6 +15,7 @@ from . import hydro_ottawa
 from . import cgi
 from . import telesat
 from . import versaterm
+from . import coveo
 
 ACTIVE_SCRAPERS = [
     city_ottawa,
@@ -22,4 +23,5 @@ ACTIVE_SCRAPERS = [
     cgi,
     telesat,
     versaterm,
+    coveo,
 ]
