@@ -1,27 +1,24 @@
 """
 CGI Canada careers, hosted on the njoyn ATS platform (cgi.njoyn.com).
-Confirmed server-rendered (no JS needed) - the job listing table is present
-in the raw HTML. The site doesn't expose a simple GET-based location/keyword
-filter that works without JS form submission, so we instead pull the
-(globally sorted, newest-first) listing and filter for Canada/Ottawa
-ourselves in Python.
 
-NOTE: only page 1 (~50 most recent postings, globally) is scraped per run.
-Postings appear to sort newest-first by Position ID, so this should reliably
-catch new Canadian postings without needing to paginate through thousands of
-global listings. If Ottawa postings start getting missed, we can add
-pagination (the site uses a JS gotopage() call, so that would need Playwright).
+NOTE: This page IS server-rendered HTML (confirmed by manual inspection),
+but the njoyn platform appears to apply anti-bot measures against plain
+`requests` calls specifically (likely user-agent/session fingerprinting
+rather than requiring JS) - it returned 0 rows in production even though
+the same URL worked fine for manual inspection. Using Playwright's real
+browser context gets past this reliably.
+
+Only page 1 (~50 most recent postings, globally) is scraped per run.
+Postings appear to sort newest-first, so this should reliably catch new
+Canadian/Ottawa postings without needing to paginate through thousands of
+global listings.
 """
-from .utils import get_soup, make_job, clean_text
+from .utils import clean_text, make_job
+from .browser_utils import get_rendered_html
+from bs4 import BeautifulSoup
 
 SOURCE_NAME = "CGI"
-URL = "https://cgi.njoyn.com/corp/xweb/xweb.asp"
-
-PARAMS = {
-    "CLID": "21001",
-    "page": "joblisting",
-    "lang": "1",
-}
+URL = "https://cgi.njoyn.com/corp/xweb/xweb.asp?CLID=21001&page=joblisting&lang=1"
 
 LOCATION_KEYWORDS = ["ottawa", "gatineau", "remote", "canada"]
 
@@ -29,12 +26,14 @@ LOCATION_KEYWORDS = ["ottawa", "gatineau", "remote", "canada"]
 def scrape():
     jobs = []
     try:
-        soup = get_soup(URL, params=PARAMS)
+        html = get_rendered_html(URL, wait_selector="table", wait_ms=6000)
     except Exception as e:
-        print(f"[{SOURCE_NAME}] fetch failed: {e}")
+        print(f"[{SOURCE_NAME}] browser fetch failed: {e}")
         return jobs
 
+    soup = BeautifulSoup(html, "lxml")
     rows = soup.select("table tr")
+
     if not rows:
         print(f"[{SOURCE_NAME}] no table rows found - markup may have changed")
         return jobs
@@ -52,17 +51,8 @@ def scrape():
         city = clean_text(cells[3].get_text()) if len(cells) > 3 else ""
         country = clean_text(cells[4].get_text()) if len(cells) > 4 else ""
 
-        if not title:
+        if not title or country.lower() != "canada":
             continue
-
-        # Only keep Canadian postings, biased toward Ottawa/Gatineau/remote
-        location_text = f"{city} {country}".lower()
-        if country.lower() != "canada":
-            continue
-        if not any(kw in location_text for kw in LOCATION_KEYWORDS) and city:
-            # Keep it anyway if it's Canada-wide with no specific city match -
-            # better to over-include than silently miss an Ottawa posting
-            pass
 
         href = link["href"]
         if not href.startswith("http"):

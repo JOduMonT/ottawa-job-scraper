@@ -22,6 +22,9 @@ def run():
         try:
             jobs = scraper.scrape()
             print(f"[{source_name}] found {len(jobs)} raw postings")
+            if jobs:
+                sample_titles = [j["title"] for j in jobs[:5]]
+                print(f"[{source_name}] sample titles: {sample_titles}")
             all_jobs.extend(jobs)
         except Exception as e:
             # one broken scraper should never take down the whole run
