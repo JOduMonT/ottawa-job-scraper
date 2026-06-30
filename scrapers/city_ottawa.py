@@ -2,14 +2,13 @@
 City of Ottawa careers (Avature-based, JS-rendered).
 Filters to the "Information Technology jobs" category.
 
-Since exact CSS class names on Avature sites vary by tenant and can't be
-verified without rendering JS live, this targets job links by URL pattern
-instead of guessing class names - any <a> pointing to a job detail page
-under /city-jobs/ with a longer text label is treated as a posting. This
-is more resilient to markup/class-name changes than relying on exact
-selectors, at the cost of occasionally picking up a stray non-job link
-(harmless - it'll just get filtered out by the relevance scorer).
+First pass matched on broad URL patterns and picked up navigation links
+(language switcher, "View Jobs" menu item, category list links) instead of
+actual postings. Real job postings on Avature career sites carry a unique
+numeric posting ID in the URL - nav links don't - so we require that as
+the matching signal instead.
 """
+import re
 from .utils import clean_text, make_job
 from .browser_utils import get_rendered_html
 from bs4 import BeautifulSoup
@@ -17,9 +16,20 @@ from bs4 import BeautifulSoup
 SOURCE_NAME = "City of Ottawa"
 URL = "https://jobs-emplois.ottawa.ca/city-jobs/viewalljobs/?category=Information+Technology+jobs"
 
-# Wait for ANY anchor tag to appear rather than a specific class, since we
-# don't know the exact class name without live inspection.
 WAIT_SELECTOR = "a[href]"
+
+# Matches job detail URLs like .../city-jobs/JobDetail/something/12345
+# or any path segment that's purely numeric (the posting ID).
+JOB_ID_PATTERN = re.compile(r"/\d{4,}(/|$|\?)")
+
+# Known nav/menu link text to explicitly exclude even if a stray ID matches
+EXCLUDE_TITLES = {
+    "english (united kingdom)", "français (canada)", "view jobs",
+    "apply now", "view job", "learn more", "search/apply for jobs",
+    "frequently asked questions", "technical faqs", "working here",
+    "why us?", "core behaviours", "leadership competencies", "language",
+    "candidate profile", "employee profile", "home",
+}
 
 
 def scrape():
@@ -36,15 +46,14 @@ def scrape():
     seen_urls = set()
     for link in links:
         href = link["href"]
-        # job detail pages on Avature career sites typically contain
-        # "/job/" or a posting ID pattern in the URL
-        if not any(marker in href.lower() for marker in ["/job/", "jobid", "joboffer", "/city-jobs/"]):
+
+        if not JOB_ID_PATTERN.search(href):
             continue
 
         title = clean_text(link.get_text())
-        # filter out nav links, "Apply now" buttons, etc. by requiring a
-        # reasonably descriptive title
-        if not title or len(title) < 8 or title.lower() in ("apply now", "view job", "learn more"):
+        if not title or len(title) < 8:
+            continue
+        if title.lower() in EXCLUDE_TITLES:
             continue
 
         if href.startswith("/"):
