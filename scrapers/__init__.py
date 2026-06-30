@@ -16,6 +16,7 @@ from . import cgi
 from . import telesat
 from . import versaterm
 from . import coveo
+from . import foci
 
 ACTIVE_SCRAPERS = [
     city_ottawa,
@@ -24,4 +25,5 @@ ACTIVE_SCRAPERS = [
     telesat,
     versaterm,
     coveo,
+    foci,
 ]

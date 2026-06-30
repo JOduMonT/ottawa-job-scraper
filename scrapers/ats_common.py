@@ -79,5 +79,48 @@ def scrape_greenhouse(company_slug, source_name, location_filter=None):
     return jobs
 
 
+def scrape_bamboohr(company_slug, source_name, location_filter=None):
+    """
+    BambooHR public jobs feed:
+    https://<slug>.bamboohr.com/careers/list
+    Returns JSON with a 'result' list of postings. Each has id, jobOpeningName,
+    location {city, state}, etc. Detail URL is /careers/<id>.
+    """
+    jobs = []
+    url = f"https://{company_slug}.bamboohr.com/careers/list"
+    try:
+        data = get_json(url)
+    except Exception as e:
+        print(f"[{source_name}] BambooHR API fetch failed: {e}")
+        return jobs
+
+    for posting in data.get("result", []):
+        title = clean_text(posting.get("jobOpeningName", ""))
+        job_id = posting.get("id")
+        if not title or not job_id:
+            continue
+
+        loc = posting.get("location") or {}
+        city = clean_text(loc.get("city", "")) if isinstance(loc, dict) else ""
+        state = clean_text(loc.get("state", "")) if isinstance(loc, dict) else ""
+        location = clean_text(f"{city} {state}").strip()
+        if not location and isinstance(posting.get("location"), str):
+            location = clean_text(posting.get("location"))
+        if posting.get("isRemote"):
+            location = (location + " (Remote)").strip()
+
+        href = f"https://{company_slug}.bamboohr.com/careers/{job_id}"
+
+        if location_filter and location:
+            loc_lower = location.lower()
+            # keep empty-location postings (over-include); filter clear non-matches
+            if not any(f in loc_lower for f in location_filter):
+                continue
+
+        jobs.append(make_job(title=title, url=href, source=source_name,
+                             location=location or "See posting"))
+    return jobs
+
+
 # Common Canadian/Ottawa location filters reused across sources
 OTTAWA_LOCATION_FILTER = ["ottawa", "gatineau", "kanata", "remote", "canada", "ontario"]
