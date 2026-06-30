@@ -14,10 +14,12 @@ from . import city_ottawa
 from . import hydro_ottawa
 from . import cgi
 from . import telesat
+from . import versaterm
 
 ACTIVE_SCRAPERS = [
     city_ottawa,
     hydro_ottawa,
     cgi,
     telesat,
+    versaterm,
 ]
