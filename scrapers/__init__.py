@@ -13,9 +13,11 @@ location, and click "Create job alert" to get official email notifications.
 from . import city_ottawa
 from . import hydro_ottawa
 from . import cgi
+from . import telesat
 
 ACTIVE_SCRAPERS = [
     city_ottawa,
     hydro_ottawa,
     cgi,
+    telesat,
 ]

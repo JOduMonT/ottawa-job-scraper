@@ -5,7 +5,7 @@ previous runs, and emails the digest via SendGrid.
 """
 from scrapers import ACTIVE_SCRAPERS
 from relevance import filter_relevant
-from dedup import filter_new
+from dedup import mark_new_and_seen
 from emailer import send_digest
 
 # Sources considered "secondary tier" - broader telecom/hardware companies
@@ -33,17 +33,18 @@ def run():
     relevant = filter_relevant(all_jobs)
     print(f"{len(relevant)} postings passed the relevance filter")
 
-    new_jobs = filter_new(relevant)
-    print(f"{len(new_jobs)} are new since the last run")
+    all_postings = mark_new_and_seen(relevant)
+    new_count = sum(1 for j in all_postings if j["is_new"])
+    print(f"{new_count} are new since the last run ({len(all_postings)} total shown)")
 
     jobs_by_tier = {"Primary": [], "Secondary (broader fit)": []}
-    for job in new_jobs:
+    for job in all_postings:
         if job["source"] in SECONDARY_TIER_SOURCES:
             jobs_by_tier["Secondary (broader fit)"].append(job)
         else:
             jobs_by_tier["Primary"].append(job)
 
-    send_digest(jobs_by_tier)
+    send_digest(jobs_by_tier, new_count=new_count)
 
 
 if __name__ == "__main__":

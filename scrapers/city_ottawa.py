@@ -2,18 +2,16 @@
 City of Ottawa careers (SuccessFactors-based career site).
 Filters to the "Information Technology jobs" category.
 
-CORRECTED: the previous URL (.../viewalljobs/?category=...) only shows a
-category MENU page, not actual postings - that's why nav links like
-"Cybersecurity" and "OC Transpo" were being scraped instead of real jobs.
-The actual category listing page is at a different URL pattern
-(.../city-jobs/go/<Category-Name>/<id>/), confirmed via live inspection.
-
-Also confirmed this page is plain server-rendered HTML - no JS/Playwright
-needed, which makes this faster and more reliable than the browser-based
-approach used for Hydro Ottawa/CGI.
+URL and matching pattern confirmed correct via live inspection - the issue
+is plain `requests` returning 0 results in production (same anti-bot
+pattern seen with CGI's njoyn platform: works fine for a one-off manual
+fetch but gets blocked on repeated/non-browser traffic). Switched to
+Playwright's real browser context to get past this.
 """
 import re
-from .utils import get_soup, clean_text, make_job
+from .utils import clean_text, make_job
+from .browser_utils import get_rendered_html
+from bs4 import BeautifulSoup
 
 SOURCE_NAME = "City of Ottawa"
 URL = "https://jobs-emplois.ottawa.ca/city-jobs/go/Information-Technology-jobs/8649547/"
@@ -25,11 +23,12 @@ JOB_URL_PATTERN = re.compile(r"/city-jobs/job/")
 def scrape():
     jobs = []
     try:
-        soup = get_soup(URL)
+        html = get_rendered_html(URL, wait_selector="a[href*='/city-jobs/job/']", wait_ms=6000)
     except Exception as e:
-        print(f"[{SOURCE_NAME}] fetch failed: {e}")
+        print(f"[{SOURCE_NAME}] browser fetch failed: {e}")
         return jobs
 
+    soup = BeautifulSoup(html, "lxml")
     links = soup.find_all("a", href=True)
     seen_urls = set()
 
